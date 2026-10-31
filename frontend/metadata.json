@@ -1,0 +1,7 @@
+{
+  "name": "SubscriptIQ",
+  "description": "SubscriptIQ — Subscription Management System for Brightloop Software. Manage every subscription. Automate every billing cycle.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
