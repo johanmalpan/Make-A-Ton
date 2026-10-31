@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, FileText, Eye, CreditCard, Send, Printer } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Plus, Eye, CreditCard, TrendingUp, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { SearchBar } from '../components/common/SearchBar';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -34,6 +34,30 @@ export const Invoices: React.FC<InvoicesProps> = ({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
+  // Financial overview metrics calculation
+  const metrics = useMemo(() => {
+    let totalInvoiced = 0;
+    let totalCollected = 0;
+    let outstandingReceivables = 0;
+    let overdueBalance = 0;
+
+    invoices.forEach((inv) => {
+      totalInvoiced += inv.totalAmount || 0;
+      totalCollected += inv.paidAmount || 0;
+      outstandingReceivables += inv.outstandingBalance || 0;
+      if (inv.status === 'overdue') {
+        overdueBalance += inv.outstandingBalance || 0;
+      }
+    });
+
+    return {
+      totalInvoiced,
+      totalCollected,
+      outstandingReceivables,
+      overdueBalance,
+    };
+  }, [invoices]);
+
   const filtered = invoices.filter((i) => {
     const matchesSearch =
       i.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -43,7 +67,9 @@ export const Invoices: React.FC<InvoicesProps> = ({
     return matchesSearch && matchesStatus;
   });
 
-  const handleSaveInvoice = (data: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt' | 'updatedAt' | 'outstandingBalance'>) => {
+  const handleSaveInvoice = (
+    data: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt' | 'updatedAt' | 'outstandingBalance'>
+  ) => {
     invoiceService.create(data);
     setIsFormOpen(false);
     onRefresh();
@@ -66,13 +92,68 @@ export const Invoices: React.FC<InvoicesProps> = ({
         action={
           <button
             onClick={() => setIsFormOpen(true)}
-            className="px-4 py-2 bg-[#15966B] hover:bg-[#107553] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+            className="px-4 py-2 bg-[#15966B] hover:bg-[#107553] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>New Tax Invoice</span>
           </button>
         }
       />
+
+      {/* Financial Overview Metrics Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Total Invoiced</span>
+            <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+              <TrendingUp className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-2 text-xl font-bold font-mono text-slate-900">
+            {formatCurrency(metrics.totalInvoiced)}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">{invoices.length} total generated invoices</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Collected Revenue</span>
+            <span className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+              <CheckCircle2 className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-2 text-xl font-bold font-mono text-emerald-600">
+            {formatCurrency(metrics.totalCollected)}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Settled via Razorpay, UPI & NetBanking</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Outstanding Balance</span>
+            <span className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+              <Clock className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-2 text-xl font-bold font-mono text-amber-600">
+            {formatCurrency(metrics.outstandingReceivables)}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Due within standard credit period</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200/90 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500">Overdue AR Risk</span>
+            <span className="p-1.5 bg-rose-50 text-rose-600 rounded-lg">
+              <AlertTriangle className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="mt-2 text-xl font-bold font-mono text-rose-600">
+            {formatCurrency(metrics.overdueBalance)}
+          </div>
+          <p className="mt-1 text-[11px] text-slate-400">Requires follow-up reminders</p>
+        </div>
+      </div>
 
       {/* Status Segmented Tabs */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg overflow-x-auto">
@@ -140,12 +221,8 @@ export const Invoices: React.FC<InvoicesProps> = ({
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="font-semibold text-slate-900">
-                      {inv.customerCompany}
-                    </div>
-                    <div className="text-[11px] text-slate-500 font-normal">
-                      {inv.customerName}
-                    </div>
+                    <div className="font-semibold text-slate-900">{inv.customerCompany}</div>
+                    <div className="text-[11px] text-slate-500 font-normal">{inv.customerName}</div>
                   </td>
 
                   <td className="py-3.5 px-4 text-slate-600 font-mono text-[11px] tabular-nums">
