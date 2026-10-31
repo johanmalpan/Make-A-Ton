@@ -1,6 +1,7 @@
 import { Payment } from '../types/payment';
 import { INITIAL_PAYMENTS } from '../data/mockData';
 import { invoiceService } from './invoiceService';
+import { getInvoicePaymentState } from '../utils/calculations';
 
 const STORAGE_KEY = 'subscriptiq_payments';
 
@@ -67,6 +68,46 @@ export const paymentService = {
     return newPayment;
   },
 
+  /**
+   * Financial summary metrics for dashboard & billing overviews
+   */
+  getFinancialOverview() {
+    const allInvoices = invoiceService.getAll();
+    const today = new Date().toISOString().split('T')[0];
+
+    let totalBilled = 0;
+    let totalCollected = 0;
+    let totalOverdue = 0;
+    let overdueCount = 0;
+
+    for (const inv of allInvoices) {
+      if (inv.status === 'cancelled') continue;
+
+      totalBilled += inv.totalAmount;
+      totalCollected += inv.paidAmount || 0;
+
+      const { paymentState, outstandingBalance } = getInvoicePaymentState(
+        inv.totalAmount,
+        inv.paidAmount || 0,
+        inv.dueDate,
+        today
+      );
+
+      if (paymentState === 'OVERDUE') {
+        totalOverdue += outstandingBalance;
+        overdueCount += 1;
+      }
+    }
+
+    return {
+      totalBilled: Math.round(totalBilled * 100) / 100,
+      totalCollected: Math.round(totalCollected * 100) / 100,
+      totalOutstanding: Math.round(Math.max(0, totalBilled - totalCollected) * 100) / 100,
+      totalOverdue: Math.round(totalOverdue * 100) / 100,
+      overdueCount
+    };
+  },
+
   delete(id: string): boolean {
     const payments = loadFromStorage();
     const filtered = payments.filter((p) => p.id !== id);
@@ -75,3 +116,7 @@ export const paymentService = {
     return true;
   },
 };
+
+// Aliases for compatibility
+export const getAllPayments = paymentService.getAll;
+export const getFinancialOverview = paymentService.getFinancialOverview;

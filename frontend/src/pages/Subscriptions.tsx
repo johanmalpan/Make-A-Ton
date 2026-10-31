@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Plus, Repeat, Calendar, ChevronRight, Edit, Trash2, FilePlus, Pause, Play } from 'lucide-react';
+import { Plus, Edit, Trash2, FilePlus } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { SearchBar } from '../components/common/SearchBar';
 import { StatusBadge } from '../components/common/StatusBadge';
@@ -46,32 +47,57 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
       s.customerCompany.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.planName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
-    const matchesCycle = cycleFilter === 'all' || s.billingCycle === cycleFilter;
+
+    const matchesStatus =
+      statusFilter === 'all' || s.status === statusFilter;
+
+    const matchesCycle =
+      cycleFilter === 'all' || s.billingCycle === cycleFilter;
+
     return matchesSearch && matchesStatus && matchesCycle;
   });
 
-  const handleSaveSubscription = (data: Omit<Subscription, 'id' | 'subscriptionNumber' | 'createdAt' | 'updatedAt'>) => {
+  const handleSaveSubscription = (
+    data: Omit<
+      Subscription,
+      'id' | 'subscriptionNumber' | 'createdAt' | 'updatedAt'
+    >
+  ) => {
     if (editingSub) {
       subscriptionService.update(editingSub.id, data);
     } else {
       subscriptionService.create(data);
     }
+
     setEditingSub(null);
     onRefresh();
   };
 
-  const handleGenerateInvoice = (e: React.MouseEvent, sub: Subscription) => {
+  const handleGenerateInvoice = (
+    e: React.MouseEvent,
+    sub: Subscription
+  ) => {
     e.stopPropagation();
+
     const inv = invoiceService.createFromSubscription(sub);
-    alert(`Cycle invoice ${inv.invoiceNumber} created for ${sub.customerCompany}!`);
+
+    alert(
+      `Cycle invoice ${inv.invoiceNumber} created for ${sub.customerCompany}!`
+    );
+
     onRefresh();
     onNavigateToInvoices();
   };
 
-  const handleToggleStatus = (e: React.MouseEvent, sub: Subscription) => {
+  const handleToggleStatus = (
+    e: React.MouseEvent,
+    sub: Subscription
+  ) => {
     e.stopPropagation();
-    const newStatus: SubscriptionStatus = sub.status === 'active' ? 'past_due' : 'active';
+
+    const newStatus: SubscriptionStatus =
+      sub.status === 'active' ? 'past_due' : 'active';
+
     subscriptionService.updateStatus(sub.id, newStatus);
     onRefresh();
   };
@@ -158,8 +184,8 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
                 <th className="py-3 px-4">Subscription ID</th>
-                <th className="py-3 px-4">Customer & Organization</th>
-                <th className="py-3 px-4">Plan & Licenses</th>
+                <th className="py-3 px-4">Customer &amp; Organization</th>
+                <th className="py-3 px-4">Plan &amp; Licenses</th>
                 <th className="py-3 px-4 text-right">Contract Amount</th>
                 <th className="py-3 px-4">Start Date</th>
                 <th className="py-3 px-4">Renewal Date</th>
@@ -167,6 +193,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {filtered.map((sub) => (
                 <tr
@@ -188,9 +215,12 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="font-medium text-slate-800">{sub.planName}</div>
+                    <div className="font-medium text-slate-800">
+                      {sub.planName}
+                    </div>
                     <div className="text-[11px] text-slate-400 capitalize font-normal">
-                      {sub.billingCycle} cycle · {sub.quantity} seat{sub.quantity > 1 ? 's' : ''}
+                      {sub.billingCycle} cycle · {sub.quantity} seat
+                      {sub.quantity > 1 ? 's' : ''}
                     </div>
                   </td>
 
@@ -224,6 +254,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
                       >
                         <FilePlus className="w-3.5 h-3.5" />
                       </button>
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -235,6 +266,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
                       >
                         <Edit className="w-3.5 h-3.5" />
                       </button>
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

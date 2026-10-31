@@ -16,3 +16,6 @@ export interface Payment {
   notes?: string;
   createdAt: string;
 }
+
+// Alias for billing services & calculations
+export type PaymentRecord = Payment;
