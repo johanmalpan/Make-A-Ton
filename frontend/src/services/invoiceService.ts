@@ -1,4 +1,4 @@
-import { Invoice, InvoiceStatus } from '../types/invoice';
+import { Invoice, InvoiceStatus, SubscriptionToBill } from '../types/invoice';
 import { Subscription } from '../types/subscription';
 import { INITIAL_INVOICES } from '../data/mockData';
 import { calculateOutstandingBalance } from '../utils/calculations';
@@ -27,6 +27,20 @@ function saveToStorage(invoices: Invoice[]): void {
   }
 }
 
+/**
+ * Checks if an invoice was already generated for this subscription on the same cycle date.
+ * Prevents double billing.
+ */
+export function hasDuplicateBilling(subscriptionId: string, billingDate: string): boolean {
+  const invoices = loadFromStorage();
+  return invoices.some(
+    (inv) =>
+      inv.subscriptionId === subscriptionId &&
+      inv.issueDate === billingDate &&
+      inv.status !== 'cancelled'
+  );
+}
+
 export const invoiceService = {
   getAll(): Invoice[] {
     return loadFromStorage();
@@ -43,27 +57,34 @@ export const invoiceService = {
   create(data: Omit<Invoice, 'id' | 'invoiceNumber' | 'createdAt' | 'updatedAt' | 'outstandingBalance'>): Invoice {
     const invoices = loadFromStorage();
     const count = invoices.length + 1;
-    const pad = count < 10 ? `00${count}` : count < 100 ? `0${count}` : `${count}`;
+    const pad = String(count).padStart(4, '0');
+    const year = new Date().getFullYear();
     const outstandingBalance = calculateOutstandingBalance(data.totalAmount, data.paidAmount || 0);
 
     const newInvoice: Invoice = {
       ...data,
-      id: `inv-${Date.now().toString().slice(-5)}`,
-      invoiceNumber: `INV/2026/00${pad}`,
+      id: `inv-${Date.now().toString().slice(-6)}`,
+      invoiceNumber: `INV/${year}/${pad}`,
       outstandingBalance,
       createdAt: new Date().toISOString().split('T')[0],
       updatedAt: new Date().toISOString().split('T')[0],
     };
+
     const updated = [newInvoice, ...invoices];
     saveToStorage(updated);
     return newInvoice;
   },
 
   /**
-   * Generates a new recurring cycle invoice from an active subscription
+   * Generates a new recurring cycle invoice from an active subscription with duplicate check
    */
   createFromSubscription(subscription: Subscription): Invoice {
     const today = new Date().toISOString().split('T')[0];
+
+    if (hasDuplicateBilling(subscription.id, today)) {
+      throw new Error(`Double billing prevented: Invoice already exists for subscription ${subscription.subscriptionNumber} on ${today}.`);
+    }
+
     const dueDate = addDays(today, 15);
 
     return this.create({
@@ -75,15 +96,18 @@ export const invoiceService = {
       customerEmail: subscription.customerEmail,
       issueDate: today,
       dueDate,
-      items: subscription.lineItems.map((item, idx) => ({
-        id: `inv-item-${Date.now()}-${idx}`,
-        description: `${item.productName} — ${subscription.billingCycle} cycle`,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        taxRate: 18,
-        taxAmount: (item.total * 18) / 100,
-        total: item.total * 1.18,
-      })),
+      items: subscription.lineItems.map((item, idx) => {
+        const itemTax = (item.total * 18) / 100;
+        return {
+          id: `inv-item-${Date.now()}-${idx}`,
+          description: `${item.productName} — ${subscription.billingCycle} cycle`,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          taxRate: 18,
+          taxAmount: Math.round(itemTax * 100) / 100,
+          total: Math.round((item.total + itemTax) * 100) / 100,
+        };
+      }),
       subtotal: subscription.subtotal,
       taxAmount: subscription.taxAmount,
       totalAmount: subscription.totalAmount,
@@ -151,3 +175,8 @@ export const invoiceService = {
     return true;
   },
 };
+
+// Top-level exported aliases for backward/forward compatibility
+export const getAllInvoices = invoiceService.getAll;
+export const getInvoiceById = invoiceService.getById;
+export const updateInvoice = (inv: Invoice) => invoiceService.update(inv.id, inv);
