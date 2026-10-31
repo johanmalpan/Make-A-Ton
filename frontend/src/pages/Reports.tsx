@@ -1,278 +1,469 @@
-import React, { useState } from 'react';
+
+import React, { useMemo, useState } from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
-import { MetricCard } from '../components/dashboard/MetricCard';
 import { formatCurrency, formatCompactCurrency } from '../utils/formatCurrency';
+import type { Invoice, Subscription, Payment } from '../types';
 import {
   Download,
   Calendar,
-  Layers,
-  ArrowUpRight,
-  TrendingDown,
-  ShieldCheck,
-  CheckCircle,
-  FileSpreadsheet
+  TrendingUp,
+  CreditCard,
+  Users,
+  FileText,
+  AlertCircle,
 } from 'lucide-react';
 
-export const Reports: React.FC = () => {
-  const [period, setPeriod] = useState<'30d' | 'quarter' | 'ytd'>('ytd');
-  const [isExporting, setIsExporting] = useState(false);
+interface ReportsProps {
+  invoices: Invoice[];
+  subscriptions: Subscription[];
+  customers: { id: string }[];
+  payments: Payment[];
+}
 
-  const handleExportCSV = () => {
-    setIsExporting(true);
-    setTimeout(() => {
-      const csvContent =
-        'data:text/csv;charset=utf-8,' +
-        'Month,New MRR (INR),Expansion MRR (INR),Contraction MRR (INR),Churn MRR (INR),Net MRR (INR)\n' +
-        'June 2026,65000,18000,4500,8000,70500\n' +
-        'July 2026,72000,22000,3000,6500,84500\n' +
-        'August 2026,81000,26000,5000,7200,94800\n' +
-        'September 2026,89000,31000,4200,8900,106900\n' +
-        'October 2026,98000,34500,3800,9200,119500\n';
+type Period = '30d' | 'quarter' | 'ytd';
 
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `subscriptiq_mrr_report_${period}_2026.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setIsExporting(false);
-    }, 600);
+export const Reports: React.FC<ReportsProps> = ({
+  invoices,
+  subscriptions,
+  customers,
+  payments,
+}) => {
+  const [period, setPeriod] = useState<Period>('ytd');
+
+  const now = new Date();
+
+  const startDate = useMemo(() => {
+    const date = new Date();
+
+    if (period === '30d') {
+      date.setDate(date.getDate() - 30);
+    } else if (period === 'quarter') {
+      const quarterStartMonth = Math.floor(date.getMonth() / 3) * 3;
+      date.setMonth(quarterStartMonth, 1);
+      date.setHours(0, 0, 0, 0);
+    } else {
+      date.setMonth(0, 1);
+      date.setHours(0, 0, 0, 0);
+    }
+
+    return date;
+  }, [period]);
+
+  const successfulPayments = payments.filter(
+    payment => payment.status === 'succeeded'
+  );
+
+  const filteredPayments = successfulPayments.filter(payment => {
+    const paymentDate = new Date(payment.paymentDate);
+    return !Number.isNaN(paymentDate.getTime()) &&
+      paymentDate >= startDate &&
+      paymentDate <= now;
+  });
+
+  const collectedRevenue = filteredPayments.reduce(
+    (sum, payment) => sum + payment.amount,
+    0
+  );
+
+  const outstandingInvoices = invoices.filter(invoice =>
+    invoice.outstandingBalance > 0 &&
+    invoice.status !== 'paid' &&
+    invoice.status !== 'cancelled' &&
+    invoice.status !== 'draft'
+  );
+
+  const overdueInvoices = invoices.filter(invoice =>
+    invoice.outstandingBalance > 0 &&
+    invoice.status !== 'paid' &&
+    invoice.status !== 'cancelled' &&
+    invoice.status !== 'draft' &&
+    (
+      invoice.status === 'overdue' ||
+      new Date(invoice.dueDate) < now
+    )
+  );
+
+  const outstandingAmount = outstandingInvoices.reduce(
+    (sum, invoice) => sum + invoice.outstandingBalance,
+    0
+  );
+
+  const overdueAmount = overdueInvoices.reduce(
+    (sum, invoice) => sum + invoice.outstandingBalance,
+    0
+  );
+
+  const activeSubscriptions = subscriptions.filter(
+    subscription =>
+      subscription.status === 'active' ||
+      subscription.status === 'in_trial'
+  );
+
+  const subscriptionRevenue = activeSubscriptions.reduce(
+    (sum, subscription) => sum + subscription.totalAmount,
+    0
+  );
+
+  const uniqueCustomers = new Set([
+    ...subscriptions.map(subscription => subscription.customerId),
+    ...invoices.map(invoice => invoice.customerId),
+  ]);
+
+  const monthlyRevenue = useMemo(() => {
+    const months: { label: string; amount: number }[] = [];
+
+    const start = new Date(startDate);
+    start.setDate(1);
+
+    const end = new Date(now);
+    end.setDate(1);
+
+    const cursor = new Date(start);
+
+    while (cursor <= end) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth();
+
+      const amount = filteredPayments
+        .filter(payment => {
+          const date = new Date(payment.paymentDate);
+          return date.getFullYear() === year &&
+            date.getMonth() === month;
+        })
+        .reduce((sum, payment) => sum + payment.amount, 0);
+
+      months.push({
+        label: cursor.toLocaleDateString('en-IN', {
+          month: 'short',
+          year: '2-digit',
+        }),
+        amount,
+      });
+
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return months;
+  }, [filteredPayments, startDate]);
+
+  const revenueByPlan = useMemo(() => {
+    const groups: Record<string, { count: number; amount: number }> = {};
+
+    activeSubscriptions.forEach(subscription => {
+      const name = subscription.planName || 'Other';
+      if (!groups[name]) {
+        groups[name] = { count: 0, amount: 0 };
+      }
+
+      groups[name].count += 1;
+      groups[name].amount += subscription.totalAmount;
+    });
+
+    return Object.entries(groups).map(([name, data]) => ({
+      name,
+      ...data,
+    }));
+  }, [activeSubscriptions]);
+
+  const exportCSV = () => {
+    const rows = [
+      ['Payment Number', 'Customer', 'Date', 'Method', 'Amount (INR)', 'Status'],
+      ...filteredPayments.map(payment => [
+        payment.paymentNumber,
+        payment.customerCompany,
+        payment.paymentDate,
+        payment.method,
+        String(payment.amount),
+        payment.status,
+      ]),
+    ];
+
+    const csv = rows
+      .map(row =>
+        row.map(value =>
+          `"${String(value).replace(/"/g, '""')}"`
+        ).join(',')
+      )
+      .join('\n');
+
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;',
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `subscriptiq-revenue-report-${period}.csv`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
   };
 
-  const planBreakdown = [
-    { name: 'Enterprise Annual (₹79,999/yr)', share: 58, mrr: 124500, active: 18, color: 'bg-emerald-600' },
-    { name: 'Growth Tier Monthly (₹7,999/mo)', share: 24, mrr: 51993, active: 32, color: 'bg-[#101D2D]' },
-    { name: 'High-Volume API Gateway (₹9,999/mo)', share: 13, mrr: 29997, active: 14, color: 'bg-blue-600' },
-    { name: 'Starter Monthly (₹2,499/mo)', share: 5, mrr: 12495, active: 22, color: 'bg-slate-400' },
-  ];
-
-  const cycleDistribution = [
-    { cycle: 'Yearly (Annual Contracts)', count: 24, percentage: 55, revenue: 1490000 },
-    { cycle: 'Monthly (AutoPay Mandates)', count: 48, percentage: 38, revenue: 1024000 },
-    { cycle: 'Weekly (Acceleration Sprints)', count: 8, percentage: 5, revenue: 135000 },
-    { cycle: 'Daily (On-Demand Compute)', count: 3, percentage: 2, revenue: 54000 },
-  ];
-
-  const waterfallRows = [
-    { component: 'Starting MRR (Oct 01)', amount: 198500, type: 'base' },
-    { component: 'New Customer Subscriptions (+)', amount: 24500, type: 'positive' },
-    { component: 'Expansion / Plan Upgrades (+)', amount: 12000, type: 'positive' },
-    { component: 'Contraction / Module Removals (-)', amount: -3200, type: 'negative' },
-    { component: 'Churned Cancellations (-)', amount: -4800, type: 'negative' },
-    { component: 'Closing MRR (Oct 31)', amount: 227000, type: 'total' },
-  ];
+  const maxRevenue = Math.max(
+    ...monthlyRevenue.map(item => item.amount),
+    1
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Subscription Analytics & Reports"
-        subtitle="Financial cohorts, Net Revenue Retention, MRR waterfall, and cycle distributions."
+        subtitle="Revenue, subscriptions, payments and outstanding invoices."
         action={
-          <div className="flex items-center gap-2">
-            <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-              <button
-                onClick={() => setPeriod('30d')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  period === '30d' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                30 Days
-              </button>
-              <button
-                onClick={() => setPeriod('quarter')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  period === 'quarter' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Q3 2026
-              </button>
-              <button
-                onClick={() => setPeriod('ytd')}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  period === 'ytd' ? 'bg-white shadow-xs text-slate-900' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                YTD 2026
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+              {([
+                ['30d', '30 Days'],
+                ['quarter', 'This Quarter'],
+                ['ytd', 'Year to Date'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setPeriod(value)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md ${
+                    period === value
+                      ? 'bg-white shadow-sm text-slate-900'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             <button
-              onClick={handleExportCSV}
-              disabled={isExporting}
-              className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium px-3.5 py-1.5 rounded-lg shadow-xs transition-colors text-sm"
+              onClick={exportCSV}
+              className="flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-medium px-3.5 py-2 rounded-lg text-sm"
             >
-              <Download className="w-4 h-4 text-slate-500" />
-              {isExporting ? 'Exporting...' : 'Export CSV'}
+              <Download className="w-4 h-4" />
+              Export CSV
             </button>
           </div>
         }
       />
 
-      {/* Primary SaaS KPIs */}
+      {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Net Revenue Retention (NRR)"
-          value="114.2%"
-          change="+3.4%"
-          isPositive={true}
-          timeframe="YoY growth"
-          subtext="Expansion revenue outpaces churn"
-          icon={ArrowUpRight}
-        />
-        <MetricCard
-          title="Gross Monthly Churn"
-          value="1.42%"
-          change="-0.3%"
-          isPositive={true}
-          timeframe="vs Sep pace"
-          subtext="Enterprise benchmark < 2.0%"
-          icon={TrendingDown}
-          accentColor="text-emerald-600"
-        />
-        <MetricCard
-          title="Average Revenue Per Account"
-          value={formatCurrency(18420, false)}
-          change="+₹1,650"
-          isPositive={true}
-          timeframe="this quarter"
-          subtext="Normalized monthly average"
-          icon={Layers}
-        />
-        <MetricCard
-          title="Customer Lifetime Value (LTV)"
-          value={formatCurrency(348000, false)}
-          change="3.8x"
-          isPositive={true}
-          timeframe="CAC payback"
-          subtext="Gross margin adjusted"
-          icon={ShieldCheck}
-        />
-      </div>
+        {[
+          {
+            title: 'Revenue Collected',
+            value: formatCurrency(collectedRevenue),
+            description: 'Successful payments in selected period',
+            icon: TrendingUp,
+            color: 'text-emerald-600',
+          },
+          {
+            title: 'Active Subscriptions',
+            value: activeSubscriptions.length,
+            description: 'Active and trial subscriptions',
+            icon: Users,
+            color: 'text-blue-600',
+          },
+          {
+            title: 'Outstanding Amount',
+            value: formatCurrency(outstandingAmount),
+            description: `${outstandingInvoices.length} unpaid invoices`,
+            icon: FileText,
+            color: 'text-amber-600',
+          },
+          {
+            title: 'Overdue Amount',
+            value: formatCurrency(overdueAmount),
+            description: `${overdueInvoices.length} overdue invoices`,
+            icon: AlertCircle,
+            color: 'text-rose-600',
+          },
+        ].map((item, index) => {
+          const Icon = item.icon;
 
-      {/* MRR Waterfall Ledger & Plan Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Waterfall Table */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-xl shadow-xs p-5">
-          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-            <div>
-              <h3 className="font-semibold text-slate-900 font-heading">MRR Movement Waterfall</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Step-by-step net monthly recurring revenue progression</p>
+          return (
+            <div
+              key={index}
+              className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-500">
+                  {item.title}
+                </p>
+                <Icon className={`w-5 h-5 ${item.color}`} />
+              </div>
+
+              <p className="text-2xl font-bold text-slate-900 mt-3">
+                {item.value}
+              </p>
+
+              <p className="text-xs text-slate-500 mt-2">
+                {item.description}
+              </p>
             </div>
-            <span className="text-xs font-mono font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-              Net Change: +{formatCompactCurrency(28500)}
-            </span>
-          </div>
-
-          <div className="mt-4 divide-y divide-slate-100">
-            {waterfallRows.map((row, idx) => (
-              <div key={idx} className="py-3 flex items-center justify-between text-sm">
-                <span className={`font-medium ${row.type === 'total' ? 'text-slate-900 font-bold' : 'text-slate-700'}`}>
-                  {row.component}
-                </span>
-                <span
-                  className={`font-mono font-semibold ${
-                    row.type === 'positive'
-                      ? 'text-emerald-600'
-                      : row.type === 'negative'
-                      ? 'text-rose-600'
-                      : 'text-slate-900'
-                  }`}
-                >
-                  {row.amount > 0 && row.type !== 'total' && row.type !== 'base' ? '+' : ''}
-                  {formatCurrency(row.amount)}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-5 p-3.5 bg-slate-50 rounded-lg border border-slate-200/80 flex items-center gap-3 text-xs text-slate-600">
-            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>
-              Quick Ratio is currently <strong className="text-slate-800">4.56</strong> (New MRR + Expansion) ÷ (Churn + Contraction). Values above 4.0 represent top-decile capital efficiency.
-            </span>
-          </div>
-        </div>
-
-        {/* Revenue by Plan Share */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-xl shadow-xs p-5">
-          <div className="pb-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-900 font-heading">Revenue by Subscription Plan</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Share of Monthly Recurring Revenue</p>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            {planBreakdown.map((plan, i) => (
-              <div key={i} className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="font-medium text-slate-800">{plan.name}</span>
-                  <span className="font-mono font-semibold text-slate-900">{plan.share}% ({formatCurrency(plan.mrr)})</span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                  <div className={`${plan.color} h-full rounded-full`} style={{ width: `${plan.share}%` }} />
-                </div>
-                <div className="text-[11px] text-slate-400 text-right">
-                  {plan.active} active subscriptions
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Total Normalized Run-Rate:</span>
-            <span className="font-mono font-bold text-slate-900 text-sm">{formatCurrency(218985)} / mo</span>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
-      {/* Cycle Distribution Table */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+      {/* Revenue report */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
           <div>
-            <h3 className="font-semibold text-slate-900 font-heading">Billing Frequency Breakdown</h3>
-            <p className="text-xs text-slate-500">Breakdown of customer contracts across supported recurrence cadences</p>
+            <h3 className="font-semibold text-slate-900">
+              Monthly Revenue Report
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Based on successful payment transactions
+            </p>
           </div>
-          <span className="text-xs text-slate-500">83 Total Contracts</span>
+          <Calendar className="w-5 h-5 text-slate-400" />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 text-xs tracking-wider uppercase">
-              <tr>
-                <th className="py-3 px-4">Cadence</th>
-                <th className="py-3 px-4 text-center">Active Contracts</th>
-                <th className="py-3 px-4 text-center">Distribution</th>
-                <th className="py-3 px-4 text-right">Total Annualized Value (INR)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-sans">
-              {cycleDistribution.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="py-3 px-4 font-medium text-slate-900 flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-slate-400" />
-                    {row.cycle}
-                  </td>
-                  <td className="py-3 px-4 text-center font-mono font-semibold text-slate-700">
-                    {row.count}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="inline-flex items-center gap-2">
-                      <div className="w-20 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="bg-[#15966B] h-full rounded-full"
-                          style={{ width: `${row.percentage}%` }}
-                        />
-                      </div>
-                      <span className="font-mono text-xs text-slate-600">{row.percentage}%</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                    {formatCurrency(row.revenue)}
-                  </td>
+        {monthlyRevenue.length === 0 ? (
+          <p className="text-sm text-slate-500 py-8 text-center">
+            No revenue data available for this period.
+          </p>
+        ) : (
+          <div className="space-y-5 mt-5">
+            {monthlyRevenue.map((item, index) => (
+              <div key={index}>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="font-medium text-slate-700">
+                    {item.label}
+                  </span>
+                  <span className="font-semibold text-slate-900">
+                    {formatCurrency(item.amount)}
+                  </span>
+                </div>
+
+                <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-[#B87345] h-full rounded-full"
+                    style={{
+                      width: `${(item.amount / maxRevenue) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Subscription report */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-900">
+            Active Subscriptions by Plan
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Subscription counts and recorded subscription values
+          </p>
+        </div>
+
+        {revenueByPlan.length === 0 ? (
+          <p className="text-sm text-slate-500 p-6 text-center">
+            No active subscriptions available.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                <tr>
+                  <th className="px-5 py-3">Plan</th>
+                  <th className="px-5 py-3 text-center">Subscriptions</th>
+                  <th className="px-5 py-3 text-right">Total Value</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {revenueByPlan.map((plan, index) => (
+                  <tr key={index} className="hover:bg-slate-50">
+                    <td className="px-5 py-3 font-medium text-slate-800">
+                      {plan.name}
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      {plan.count}
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold">
+                      {formatCurrency(plan.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Overdue invoices */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-5 border-b border-slate-100">
+          <h3 className="font-semibold text-slate-900">
+            Overdue Invoice Report
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">
+            Invoices with unpaid balances past their due date
+          </p>
+        </div>
+
+        {overdueInvoices.length === 0 ? (
+          <p className="text-sm text-slate-500 p-6 text-center">
+            No overdue invoices.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-600 text-xs uppercase">
+                <tr>
+                  <th className="px-5 py-3">Invoice</th>
+                  <th className="px-5 py-3">Customer</th>
+                  <th className="px-5 py-3">Due Date</th>
+                  <th className="px-5 py-3 text-right">Outstanding</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {overdueInvoices.map(invoice => (
+                  <tr key={invoice.id} className="hover:bg-slate-50">
+                    <td className="px-5 py-3 font-medium text-slate-800">
+                      {invoice.invoiceNumber}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">
+                      {invoice.customerCompany}
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">
+                      {invoice.dueDate}
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-rose-600">
+                      {formatCurrency(invoice.outstandingBalance)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Additional information */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <div className="flex items-start gap-3">
+          <CreditCard className="w-5 h-5 text-slate-500 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-semibold text-slate-800">
+              Report information
+            </h4>
+            <p className="text-xs text-slate-600 mt-1">
+              Revenue is calculated from successful payment records.
+              Outstanding and overdue amounts are calculated from invoice
+              balances. Subscription values represent recorded subscription
+              totals, not normalized monthly recurring revenue.
+            </p>
+            <p className="text-xs text-slate-500 mt-2">
+              Customers represented in records: {uniqueCustomers.size}.
+              Customer records loaded: {customers.length}.
+            </p>
+          </div>
         </div>
       </div>
     </div>

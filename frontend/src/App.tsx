@@ -1,3 +1,4 @@
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -54,6 +55,7 @@ import { PaymentForm } from './components/payments/PaymentForm';
 export default function App() {
   // Navigation & User Session
   const [currentPath, setCurrentPath] = useState<NavigationPath>('dashboard');
+
   const [userSession, setUserSession] = useState<UserSession>({
     id: 'user-01',
     name: 'Brightloop Admin',
@@ -71,10 +73,14 @@ export default function App() {
   const [payments, setPayments] = useState<Payment[]>([]);
 
   // Modals state
-  const [selectedSubscription, setSelectedSubscription] = useState<Subscription | null>(null);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [isSubscriptionFormOpen, setIsSubscriptionFormOpen] = useState(false);
-  const [recordPaymentInvoice, setRecordPaymentInvoice] = useState<Invoice | null>(null);
+  const [selectedSubscription, setSelectedSubscription] =
+    useState<Subscription | null>(null);
+  const [selectedInvoice, setSelectedInvoice] =
+    useState<Invoice | null>(null);
+  const [isSubscriptionFormOpen, setIsSubscriptionFormOpen] =
+    useState(false);
+  const [recordPaymentInvoice, setRecordPaymentInvoice] =
+    useState<Invoice | null>(null);
 
   // Load all data from service layer
   const reloadData = useCallback(() => {
@@ -95,14 +101,17 @@ export default function App() {
   const handleSwitchRole = (role: 'admin' | 'customer') => {
     if (role === 'customer') {
       const firstCust = customers[0];
+
       setUserSession({
         id: 'cust-user-01',
         name: firstCust?.name || 'Rajesh K. Sharma',
         email: firstCust?.email || 'rajesh.sharma@apexlogistics.in',
         role: 'customer',
         customerId: firstCust?.id || 'cust-201',
-        customerCompany: firstCust?.company || 'Apex Logistics India Ltd',
+        customerCompany:
+          firstCust?.company || 'Apex Logistics India Ltd',
       });
+
       setCurrentPath('portal');
     } else {
       setUserSession({
@@ -111,21 +120,26 @@ export default function App() {
         email: 'admin@brightloop.io',
         role: 'admin',
       });
+
       setCurrentPath('dashboard');
     }
   };
 
   const handleLogin = (role: UserRole, customerId?: string) => {
     if (role === 'customer') {
-      const cust = customers.find(c => c.id === customerId) || customers[0];
+      const cust =
+        customers.find(c => c.id === customerId) || customers[0];
+
       setUserSession({
         id: 'cust-user-01',
         name: cust?.name || 'Rajesh K. Sharma',
         email: cust?.email || 'rajesh.sharma@apexlogistics.in',
         role: 'customer',
         customerId: cust?.id || 'cust-201',
-        customerCompany: cust?.company || 'Apex Logistics India Ltd',
+        customerCompany:
+          cust?.company || 'Apex Logistics India Ltd',
       });
+
       setCurrentPath('portal');
     } else {
       setUserSession({
@@ -134,6 +148,7 @@ export default function App() {
         email: 'admin@brightloop.io',
         role: 'admin',
       });
+
       setCurrentPath('dashboard');
     }
   };
@@ -144,11 +159,14 @@ export default function App() {
 
   // Actions
   const handleSendReminder = (invoice: Invoice) => {
-    alert(`Dunning collection notice dispatched to ${invoice.customerEmail} for Invoice ${invoice.invoiceNumber}.`);
+    alert(
+      `Dunning collection notice dispatched to ${invoice.customerEmail} for Invoice ${invoice.invoiceNumber}.`
+    );
   };
 
   const handleOpenRecordPayment = (invoiceId: string) => {
     const inv = invoices.find(i => i.id === invoiceId);
+
     if (inv) {
       setRecordPaymentInvoice(inv);
     }
@@ -162,6 +180,7 @@ export default function App() {
     notes?: string;
   }) => {
     const inv = invoices.find(i => i.id === data.invoiceId);
+
     if (!inv) return;
 
     paymentService.create({
@@ -173,7 +192,10 @@ export default function App() {
       method: data.method,
       referenceNumber: data.referenceNumber,
       status: 'succeeded',
-      paymentDate: new Date().toISOString().replace('T', ' ').slice(0, 19),
+      paymentDate: new Date()
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, 19),
       notes: data.notes,
     });
 
@@ -181,7 +203,12 @@ export default function App() {
     setRecordPaymentInvoice(null);
   };
 
-  const handleSaveNewSubscription = (data: Omit<Subscription, 'id' | 'subscriptionNumber' | 'createdAt' | 'updatedAt'>) => {
+  const handleSaveNewSubscription = (
+    data: Omit<
+      Subscription,
+      'id' | 'subscriptionNumber' | 'createdAt' | 'updatedAt'
+    >
+  ) => {
     subscriptionService.create(data);
     reloadData();
     setIsSubscriptionFormOpen(false);
@@ -194,9 +221,17 @@ export default function App() {
 
   // Count badges for sidebar
   const counts = {
-    subscriptions: subscriptions.filter(s => s.status === 'active').length,
-    quotations: quotations.filter(q => q.status === 'sent' || q.status === 'draft').length,
-    invoices: invoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled').length,
+    subscriptions: subscriptions.filter(
+      s => s.status === 'active'
+    ).length,
+
+    quotations: quotations.filter(
+      q => q.status === 'sent' || q.status === 'draft'
+    ).length,
+
+    invoices: invoices.filter(
+      i => i.status !== 'paid' && i.status !== 'cancelled'
+    ).length,
   };
 
   return (
@@ -210,10 +245,10 @@ export default function App() {
       invoices={invoices}
       customers={customers}
       plans={plans}
-      onSelectSubscription={(sub) => {
+      onSelectSubscription={sub => {
         setSelectedSubscription(sub);
       }}
-      onSelectInvoice={(inv) => {
+      onSelectInvoice={inv => {
         setSelectedInvoice(inv);
       }}
       counts={counts}
@@ -225,9 +260,15 @@ export default function App() {
           invoices={invoices}
           customers={customers}
           onNavigate={setCurrentPath}
-          onSelectSubscription={(sub) => setSelectedSubscription(sub)}
-          onSelectInvoice={(inv) => setSelectedInvoice(inv)}
-          onOpenNewSubscription={() => setIsSubscriptionFormOpen(true)}
+          onSelectSubscription={sub =>
+            setSelectedSubscription(sub)
+          }
+          onSelectInvoice={inv =>
+            setSelectedInvoice(inv)
+          }
+          onOpenNewSubscription={() =>
+            setIsSubscriptionFormOpen(true)
+          }
           onSendInvoiceReminder={handleSendReminder}
         />
       )}
@@ -247,7 +288,9 @@ export default function App() {
           plans={plans}
           products={products}
           onRefresh={reloadData}
-          onSelectPlanToSubscribe={() => setIsSubscriptionFormOpen(true)}
+          onSelectPlanToSubscribe={() =>
+            setIsSubscriptionFormOpen(true)
+          }
         />
       )}
 
@@ -258,7 +301,7 @@ export default function App() {
           subscriptions={subscriptions}
           invoices={invoices}
           onRefresh={reloadData}
-          onNavigateToSubscription={(sub) => {
+          onNavigateToSubscription={sub => {
             setSelectedSubscription(sub);
           }}
         />
@@ -272,8 +315,12 @@ export default function App() {
           plans={plans}
           products={products}
           onRefresh={reloadData}
-          onSelectSubscription={(sub) => setSelectedSubscription(sub)}
-          onNavigateToInvoices={() => setCurrentPath('invoices')}
+          onSelectSubscription={sub =>
+            setSelectedSubscription(sub)
+          }
+          onNavigateToInvoices={() =>
+            setCurrentPath('invoices')
+          }
         />
       )}
 
@@ -285,7 +332,9 @@ export default function App() {
           plans={plans}
           products={products}
           onRefresh={reloadData}
-          onNavigateToSubscriptions={() => setCurrentPath('subscriptions')}
+          onNavigateToSubscriptions={() =>
+            setCurrentPath('subscriptions')
+          }
         />
       )}
 
@@ -317,7 +366,14 @@ export default function App() {
       {currentPath === 'taxes' && <Taxes />}
 
       {/* 11. REPORTS */}
-      {currentPath === 'reports' && <Reports />}
+      {currentPath === 'reports' && (
+        <Reports
+          invoices={invoices}
+          subscriptions={subscriptions}
+          customers={customers}
+          payments={payments}
+        />
+      )}
 
       {/* 12. CUSTOMER PORTAL */}
       {currentPath === 'portal' && <CustomerPortal />}
@@ -333,7 +389,10 @@ export default function App() {
           subscription={selectedSubscription}
           onClose={() => setSelectedSubscription(null)}
           onUpdateStatus={(subId, newStatus) => {
-            subscriptionService.update(subId, { status: newStatus });
+            subscriptionService.update(subId, {
+              status: newStatus,
+            });
+
             reloadData();
             setSelectedSubscription(null);
           }}
@@ -348,8 +407,13 @@ export default function App() {
         <InvoiceDetailModal
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
-          onMarkAsPaid={(invId) => {
-            invoiceService.update(invId, { status: 'paid', outstandingBalance: 0, paidAmount: selectedInvoice.totalAmount });
+          onMarkAsPaid={invId => {
+            invoiceService.update(invId, {
+              status: 'paid',
+              outstandingBalance: 0,
+              paidAmount: selectedInvoice.totalAmount,
+            });
+
             reloadData();
             setSelectedInvoice(null);
           }}
