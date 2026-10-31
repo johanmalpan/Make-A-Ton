@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Plus, Edit, Trash2, FilePlus } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
@@ -6,7 +5,7 @@ import { SearchBar } from '../components/common/SearchBar';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { SubscriptionForm } from '../components/subscriptions/SubscriptionForm';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
-import { Subscription, SubscriptionStatus } from '../types/subscription';
+import { Subscription } from '../types/subscription';
 import { Customer } from '../types/customer';
 import { SubscriptionPlan } from '../types/plan';
 import { Product } from '../types/product';
@@ -79,27 +78,41 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
   ) => {
     e.stopPropagation();
 
-    const inv = invoiceService.createFromSubscription(sub);
+    try {
+      // 1. Prevent duplicate billing runs for active billing cycles
+      const allInvoices = invoiceService.getAll ? invoiceService.getAll() : [];
+      const hasDuplicate = allInvoices.some(
+        (inv) =>
+          inv.subscriptionId === sub.id &&
+          inv.status !== 'cancelled' &&
+          new Date(inv.createdAt || '').getMonth() === new Date().getMonth()
+      );
 
-    alert(
-      `Cycle invoice ${inv.invoiceNumber} created for ${sub.customerCompany}!`
-    );
+      if (hasDuplicate) {
+        alert(
+          `Billing Notice: An active invoice already exists for ${sub.customerCompany} in this billing period.`
+        );
+        onNavigateToInvoices();
+        return;
+      }
 
-    onRefresh();
-    onNavigateToInvoices();
-  };
+      // 2. Generate standard 18% GST tax invoice
+      const inv = invoiceService.createFromSubscription(sub);
 
-  const handleToggleStatus = (
-    e: React.MouseEvent,
-    sub: Subscription
-  ) => {
-    e.stopPropagation();
+      alert(
+        `Tax Invoice Generated Successfully!\n` +
+        `• Invoice No: ${inv.invoiceNumber}\n` +
+        `• Customer: ${sub.customerCompany}\n` +
+        `• Total (with 18% GST): ${formatCurrency(inv.totalAmount)}\n` +
+        `• Status: Posted (Due)`
+      );
 
-    const newStatus: SubscriptionStatus =
-      sub.status === 'active' ? 'past_due' : 'active';
-
-    subscriptionService.updateStatus(sub.id, newStatus);
-    onRefresh();
+      onRefresh();
+      onNavigateToInvoices();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error occurred while generating cycle invoice.';
+      alert(message);
+    }
   };
 
   const handleDeleteConfirm = () => {
@@ -121,7 +134,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
               setEditingSub(null);
               setIsFormOpen(true);
             }}
-            className="px-4 py-2 bg-[#15966B] hover:bg-[#107553] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors"
+            className="px-4 py-2 bg-[#15966B] hover:bg-[#107553] text-white rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>New Subscription</span>
@@ -249,7 +262,7 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
                     <div className="inline-flex items-center gap-1">
                       <button
                         onClick={(e) => handleGenerateInvoice(e, sub)}
-                        title="Generate Invoicing Cycle"
+                        title="Generate Invoicing Cycle (18% GST)"
                         className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
                       >
                         <FilePlus className="w-3.5 h-3.5" />
