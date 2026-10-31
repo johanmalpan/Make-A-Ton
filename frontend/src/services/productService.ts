@@ -1,5 +1,6 @@
 import { Product } from '../types/product';
 import { INITIAL_PRODUCTS } from '../data/mockData';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_products';
 
@@ -26,7 +27,15 @@ function saveToStorage(products: Product[]): void {
 
 export const productService = {
   getAll(): Product[] {
-    return loadFromStorage();
+    const data = loadFromStorage();
+    api.getProducts()
+      .then((remote: Product[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
   },
 
   getById(id: string): Product | undefined {
@@ -43,6 +52,11 @@ export const productService = {
     };
     const updated = [newProduct, ...products];
     saveToStorage(updated);
+
+    api.createProduct(newProduct).catch((err) => {
+      console.warn('Backend product sync error:', err);
+    });
+
     return newProduct;
   },
 
@@ -51,14 +65,14 @@ export const productService = {
     const index = products.findIndex((p) => p.id === id);
     if (index === -1) return undefined;
 
-    const updatedProduct = {
+    const updated = {
       ...products[index],
       ...updates,
       updatedAt: new Date().toISOString().split('T')[0],
     };
-    products[index] = updatedProduct;
+    products[index] = updated;
     saveToStorage(products);
-    return updatedProduct;
+    return updated;
   },
 
   delete(id: string): boolean {

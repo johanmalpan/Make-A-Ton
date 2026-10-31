@@ -2,6 +2,7 @@ import { Payment } from '../types/payment';
 import { INITIAL_PAYMENTS } from '../data/mockData';
 import { invoiceService } from './invoiceService';
 import { getInvoicePaymentState } from '../utils/calculations';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_payments';
 
@@ -28,7 +29,15 @@ function saveToStorage(payments: Payment[]): void {
 
 export const paymentService = {
   getAll(): Payment[] {
-    return loadFromStorage();
+    const data = loadFromStorage();
+    api.getPayments()
+      .then((remote: Payment[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
   },
 
   getByInvoiceId(invoiceId: string): Payment[] {
@@ -43,9 +52,6 @@ export const paymentService = {
     return loadFromStorage().find((p) => p.id === id);
   },
 
-  /**
-   * Records a payment against an invoice and updates the invoice balance automatically
-   */
   create(data: Omit<Payment, 'id' | 'paymentNumber' | 'createdAt'>): Payment {
     const payments = loadFromStorage();
     const count = payments.length + 1;
@@ -58,54 +64,22 @@ export const paymentService = {
       createdAt: new Date().toISOString().split('T')[0],
     };
 
-    // If payment succeeded, automatically update invoice balance!
-    if (data.status === 'succeeded') {
-      invoiceService.recordPayment(data.invoiceId, data.amount);
-    }
-
     const updated = [newPayment, ...payments];
     saveToStorage(updated);
+
+    invoiceService.recordPayment(data.invoiceId, data.amount, data.method);
     return newPayment;
   },
 
-  /**
-   * Financial summary metrics for dashboard & billing overviews
-   */
-  getFinancialOverview() {
-    const allInvoices = invoiceService.getAll();
-    const today = new Date().toISOString().split('T')[0];
+  getTotalPaidForInvoice(invoiceId: string): number {
+    return this.getByInvoiceId(invoiceId)
+      .filter((p) => p.status === 'succeeded')
+      .reduce((sum, p) => sum + p.amount, 0);
+  },
 
-    let totalBilled = 0;
-    let totalCollected = 0;
-    let totalOverdue = 0;
-    let overdueCount = 0;
-
-    for (const inv of allInvoices) {
-      if (inv.status === 'cancelled') continue;
-
-      totalBilled += inv.totalAmount;
-      totalCollected += inv.paidAmount || 0;
-
-      const { paymentState, outstandingBalance } = getInvoicePaymentState(
-        inv.totalAmount,
-        inv.paidAmount || 0,
-        inv.dueDate,
-        today
-      );
-
-      if (paymentState === 'OVERDUE') {
-        totalOverdue += outstandingBalance;
-        overdueCount += 1;
-      }
-    }
-
-    return {
-      totalBilled: Math.round(totalBilled * 100) / 100,
-      totalCollected: Math.round(totalCollected * 100) / 100,
-      totalOutstanding: Math.round(Math.max(0, totalBilled - totalCollected) * 100) / 100,
-      totalOverdue: Math.round(totalOverdue * 100) / 100,
-      overdueCount
-    };
+  getPaymentState(invoiceTotal: number, invoiceId: string) {
+    const totalPaid = this.getTotalPaidForInvoice(invoiceId);
+    return getInvoicePaymentState(invoiceTotal, totalPaid);
   },
 
   delete(id: string): boolean {
@@ -116,7 +90,3 @@ export const paymentService = {
     return true;
   },
 };
-
-// Aliases for compatibility
-export const getAllPayments = paymentService.getAll;
-export const getFinancialOverview = paymentService.getFinancialOverview;

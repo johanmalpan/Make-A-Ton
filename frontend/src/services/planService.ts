@@ -1,5 +1,6 @@
 import { SubscriptionPlan } from '../types/plan';
 import { INITIAL_PLANS } from '../data/mockData';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_plans';
 
@@ -26,7 +27,15 @@ function saveToStorage(plans: SubscriptionPlan[]): void {
 
 export const planService = {
   getAll(): SubscriptionPlan[] {
-    return loadFromStorage();
+    const data = loadFromStorage();
+    api.getPlans()
+      .then((remote: SubscriptionPlan[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
   },
 
   getById(id: string): SubscriptionPlan | undefined {
@@ -43,6 +52,11 @@ export const planService = {
     };
     const updated = [newPlan, ...plans];
     saveToStorage(updated);
+
+    api.createPlan(newPlan).catch((err) => {
+      console.warn('Backend plan sync error:', err);
+    });
+
     return newPlan;
   },
 
@@ -51,14 +65,14 @@ export const planService = {
     const index = plans.findIndex((p) => p.id === id);
     if (index === -1) return undefined;
 
-    const updatedPlan = {
+    const updated = {
       ...plans[index],
       ...updates,
       updatedAt: new Date().toISOString().split('T')[0],
     };
-    plans[index] = updatedPlan;
+    plans[index] = updated;
     saveToStorage(plans);
-    return updatedPlan;
+    return updated;
   },
 
   delete(id: string): boolean {

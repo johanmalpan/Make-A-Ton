@@ -3,6 +3,7 @@ import { Subscription } from '../types/subscription';
 import { INITIAL_QUOTATIONS } from '../data/mockData';
 import { subscriptionService } from './subscriptionService';
 import { addYears, addMonths } from '../utils/formatDate';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_quotations';
 
@@ -29,7 +30,15 @@ function saveToStorage(quotations: Quotation[]): void {
 
 export const quotationService = {
   getAll(): Quotation[] {
-    return loadFromStorage();
+    const data = loadFromStorage();
+    api.getQuotations()
+      .then((remote: Quotation[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
   },
 
   getById(id: string): Quotation | undefined {
@@ -49,6 +58,11 @@ export const quotationService = {
     };
     const updated = [newQuote, ...quotations];
     saveToStorage(updated);
+
+    api.createQuotation(newQuote).catch((err) => {
+      console.warn('Backend quotation sync error:', err);
+    });
+
     return newQuote;
   },
 
@@ -63,61 +77,47 @@ export const quotationService = {
     return quotations[index];
   },
 
-  /**
-   * Odoo Hackathon workflow: Confirm quotation and convert directly into an active subscription!
-   */
-  confirmAndConvertToSubscription(id: string): { quotation: Quotation; subscription: Subscription } | undefined {
-    const quotation = this.getById(id);
-    if (!quotation) return undefined;
-
-    const startDate = new Date().toISOString().split('T')[0];
-    const expiryDate = quotation.billingCycle === 'yearly'
-      ? addYears(startDate, 1)
-      : addMonths(startDate, 1);
-
-    const subscription = subscriptionService.create({
-      customerId: quotation.customerId,
-      customerName: quotation.customerName,
-      customerCompany: quotation.customerCompany,
-      customerEmail: quotation.customerEmail,
-      planId: quotation.planId,
-      planName: quotation.planName,
-      billingCycle: quotation.billingCycle,
-      startDate,
-      expiryDate,
-      nextRenewalDate: expiryDate,
-      lineItems: quotation.lineItems,
-      quantity: quotation.lineItems.reduce((s, it) => s + it.quantity, 0) || 1,
-      subtotal: quotation.subtotal,
-      taxAmount: quotation.taxAmount,
-      totalAmount: quotation.totalAmount,
-      autoRenew: true,
-      status: 'active',
-      paymentMethod: 'Bank Transfer / Invoice Net 15',
-      notes: `Converted from Sales Order ${quotation.quotationNumber}`,
-    });
-
-    const updatedQuotation = this.update(id, {
-      status: 'accepted',
-      convertedSubscriptionId: subscription.id,
-    });
-
-    return updatedQuotation ? { quotation: updatedQuotation, subscription } : undefined;
-  },
-
-  update(id: string, updates: Partial<Quotation>): Quotation | undefined {
+  convertToSubscription(id: string): Subscription | undefined {
     const quotations = loadFromStorage();
     const index = quotations.findIndex((q) => q.id === id);
     if (index === -1) return undefined;
 
-    const updated = {
-      ...quotations[index],
-      ...updates,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-    quotations[index] = updated;
+    const quote = quotations[index];
+    const today = new Date().toISOString().split('T')[0];
+    const expiry = quote.billingCycle === 'yearly' ? addYears(today, 1) : addMonths(today, 1);
+
+    const newSub = subscriptionService.create({
+      customerId: quote.customerId,
+      customerName: quote.customerName,
+      customerCompany: quote.customerCompany,
+      customerEmail: quote.customerEmail,
+      planId: quote.planId,
+      planName: quote.planName,
+      billingCycle: quote.billingCycle,
+      startDate: today,
+      expiryDate: expiry,
+      nextRenewalDate: expiry,
+      lineItems: quote.lineItems,
+      quantity: 1,
+      subtotal: quote.subtotal,
+      taxAmount: quote.taxAmount,
+      totalAmount: quote.totalAmount,
+      autoRenew: true,
+      status: 'active',
+      paymentMethod: 'NetBanking',
+      notes: `Converted from Quotation ${quote.quotationNumber}`,
+    });
+
+    quotations[index].status = 'accepted';
+    quotations[index].convertedSubscriptionId = newSub.id;
+    quotations[index].updatedAt = today;
     saveToStorage(quotations);
-    return updated;
+
+    api.convertQuotation(id).catch((err) => {
+      console.warn('Backend convert quotation sync error:', err);
+    });
+
+    return newSub;
   },
 
   delete(id: string): boolean {

@@ -3,6 +3,7 @@ import { Subscription } from '../types/subscription';
 import { INITIAL_INVOICES } from '../data/mockData';
 import { calculateOutstandingBalance } from '../utils/calculations';
 import { addDays } from '../utils/formatDate';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_invoices';
 
@@ -27,10 +28,6 @@ function saveToStorage(invoices: Invoice[]): void {
   }
 }
 
-/**
- * Checks if an invoice was already generated for this subscription on the same cycle date.
- * Prevents double billing.
- */
 export function hasDuplicateBilling(subscriptionId: string, billingDate: string): boolean {
   const invoices = loadFromStorage();
   return invoices.some(
@@ -43,6 +40,25 @@ export function hasDuplicateBilling(subscriptionId: string, billingDate: string)
 
 export const invoiceService = {
   getAll(): Invoice[] {
+    const data = loadFromStorage();
+    api.getInvoices()
+      .then((remote: Invoice[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
+  },
+
+  async fetchAll(): Promise<Invoice[]> {
+    try {
+      const remote = await api.getInvoices();
+      if (Array.isArray(remote) && remote.length > 0) {
+        saveToStorage(remote);
+        return remote;
+      }
+    } catch {}
     return loadFromStorage();
   },
 
@@ -72,20 +88,61 @@ export const invoiceService = {
 
     const updated = [newInvoice, ...invoices];
     saveToStorage(updated);
+
+    api.createInvoice(newInvoice).catch((err) => {
+      console.warn('Backend invoice create sync error:', err);
+    });
+
     return newInvoice;
   },
 
-  /**
-   * Generates a new recurring cycle invoice from an active subscription with duplicate check
-   */
-  createFromSubscription(subscription: Subscription): Invoice {
-    const today = new Date().toISOString().split('T')[0];
+  updateStatus(id: string, newStatus: InvoiceStatus): Invoice | undefined {
+    const invoices = loadFromStorage();
+    const index = invoices.findIndex((inv) => inv.id === id);
+    if (index === -1) return undefined;
 
-    if (hasDuplicateBilling(subscription.id, today)) {
-      throw new Error(`Double billing prevented: Invoice already exists for subscription ${subscription.subscriptionNumber} on ${today}.`);
-    }
+    invoices[index].status = newStatus;
+    invoices[index].updatedAt = new Date().toISOString().split('T')[0];
+    saveToStorage(invoices);
+    return invoices[index];
+  },
 
-    const dueDate = addDays(today, 15);
+  recordPayment(id: string, amount: number, paymentMethod = 'UPI'): Invoice | undefined {
+    const invoices = loadFromStorage();
+    const index = invoices.findIndex((inv) => inv.id === id);
+    if (index === -1) return undefined;
+
+    const inv = invoices[index];
+    const newPaidAmount = (inv.paidAmount || 0) + amount;
+    const newOutstanding = calculateOutstandingBalance(inv.totalAmount, newPaidAmount);
+
+    inv.paidAmount = newPaidAmount;
+    inv.outstandingBalance = newOutstanding;
+    inv.status = newOutstanding <= 0 ? 'paid' : 'partial';
+    inv.updatedAt = new Date().toISOString().split('T')[0];
+
+    saveToStorage(invoices);
+
+    api.payInvoice(id, { amount, method: paymentMethod }).catch((err) => {
+      console.warn('Backend payment record sync error:', err);
+    });
+
+    return inv;
+  },
+
+  generateForSubscription(subscription: Subscription): Invoice {
+    const issueDate = new Date().toISOString().split('T')[0];
+    const dueDate = addDays(issueDate, 15);
+
+    const invoiceItems = subscription.lineItems.map((item, idx) => ({
+      id: `item-${Date.now()}-${idx}`,
+      description: `${subscription.planName} - ${item.productName}`,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      taxRate: 18,
+      taxAmount: Math.round(item.total * 0.18 * 100) / 100,
+      total: Math.round(item.total * 1.18 * 100) / 100,
+    }));
 
     return this.create({
       subscriptionId: subscription.id,
@@ -94,89 +151,64 @@ export const invoiceService = {
       customerName: subscription.customerName,
       customerCompany: subscription.customerCompany,
       customerEmail: subscription.customerEmail,
-      issueDate: today,
+      issueDate,
       dueDate,
-      items: subscription.lineItems.map((item, idx) => {
-        const itemTax = (item.total * 18) / 100;
-        return {
-          id: `inv-item-${Date.now()}-${idx}`,
-          description: `${item.productName} — ${subscription.billingCycle} cycle`,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          taxRate: 18,
-          taxAmount: Math.round(itemTax * 100) / 100,
-          total: Math.round((item.total + itemTax) * 100) / 100,
-        };
-      }),
+      items: invoiceItems,
       subtotal: subscription.subtotal,
       taxAmount: subscription.taxAmount,
       totalAmount: subscription.totalAmount,
       paidAmount: 0,
       status: 'posted',
       paymentTerms: 'Net 15 Days',
-      notes: `Recurring cycle for ${subscription.subscriptionNumber}`,
+      notes: `Recurring billing for ${subscription.subscriptionNumber}`,
     });
   },
 
-  updateStatus(id: string, status: InvoiceStatus): Invoice | undefined {
-    const invoices = loadFromStorage();
-    const index = invoices.findIndex((i) => i.id === id);
-    if (index === -1) return undefined;
+  createFromBillingEngine(bill: SubscriptionToBill): Invoice {
+    const issueDate = bill.billingDate;
+    const dueDate = addDays(issueDate, 15);
 
-    invoices[index].status = status;
-    invoices[index].updatedAt = new Date().toISOString().split('T')[0];
-    saveToStorage(invoices);
-    return invoices[index];
-  },
+    let subtotal = 0;
+    let taxAmount = 0;
 
-  recordPayment(id: string, paymentAmount: number): Invoice | undefined {
-    const invoices = loadFromStorage();
-    const index = invoices.findIndex((i) => i.id === id);
-    if (index === -1) return undefined;
+    const invoiceItems = bill.lines.map((line, idx) => {
+      const lineSubtotal = line.quantity * line.unitPrice;
+      const lineTax = (lineSubtotal * line.taxRatePercent) / 100;
+      const lineTotal = lineSubtotal + lineTax;
 
-    const invoice = invoices[index];
-    const newPaidAmount = (invoice.paidAmount || 0) + paymentAmount;
-    const newOutstanding = calculateOutstandingBalance(invoice.totalAmount, newPaidAmount);
-    const newStatus: InvoiceStatus = newOutstanding <= 0 ? 'paid' : 'partial';
+      subtotal += lineSubtotal;
+      taxAmount += lineTax;
 
-    const updated: Invoice = {
-      ...invoice,
-      paidAmount: newPaidAmount,
-      outstandingBalance: newOutstanding,
-      status: newStatus,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
+      return {
+        id: `item-${Date.now()}-${idx}`,
+        description: line.productName,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        taxRate: line.taxRatePercent,
+        taxAmount: Math.round(lineTax * 100) / 100,
+        total: Math.round(lineTotal * 100) / 100,
+      };
+    });
 
-    invoices[index] = updated;
-    saveToStorage(invoices);
-    return updated;
-  },
+    const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
 
-  update(id: string, updates: Partial<Invoice>): Invoice | undefined {
-    const invoices = loadFromStorage();
-    const index = invoices.findIndex((i) => i.id === id);
-    if (index === -1) return undefined;
-
-    const updated = {
-      ...invoices[index],
-      ...updates,
-      updatedAt: new Date().toISOString().split('T')[0],
-    };
-    invoices[index] = updated;
-    saveToStorage(invoices);
-    return updated;
-  },
-
-  delete(id: string): boolean {
-    const invoices = loadFromStorage();
-    const filtered = invoices.filter((i) => i.id !== id);
-    if (filtered.length === invoices.length) return false;
-    saveToStorage(filtered);
-    return true;
+    return this.create({
+      subscriptionId: bill.id,
+      customerId: bill.customerId,
+      customerName: bill.customerName,
+      customerCompany: bill.customerCompany || '',
+      customerEmail: bill.customerEmail || '',
+      issueDate,
+      dueDate,
+      items: invoiceItems,
+      subtotal: Math.round(subtotal * 100) / 100,
+      discountCode: bill.discountCode,
+      taxAmount: Math.round(taxAmount * 100) / 100,
+      totalAmount,
+      paidAmount: 0,
+      status: 'posted',
+      paymentTerms: 'Net 15 Days',
+      notes: `Billing Engine Cycle: ${bill.billingDate}`,
+    });
   },
 };
-
-// Top-level exported aliases for backward/forward compatibility
-export const getAllInvoices = invoiceService.getAll;
-export const getInvoiceById = invoiceService.getById;
-export const updateInvoice = (inv: Invoice) => invoiceService.update(inv.id, inv);

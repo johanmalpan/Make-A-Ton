@@ -1,5 +1,6 @@
 import { Subscription, SubscriptionStatus } from '../types/subscription';
 import { INITIAL_SUBSCRIPTIONS } from '../data/mockData';
+import { api } from './api';
 
 const STORAGE_KEY = 'subscriptiq_subscriptions';
 
@@ -26,6 +27,25 @@ function saveToStorage(subscriptions: Subscription[]): void {
 
 export const subscriptionService = {
   getAll(): Subscription[] {
+    const data = loadFromStorage();
+    api.getSubscriptions()
+      .then((remote: Subscription[]) => {
+        if (Array.isArray(remote) && remote.length > 0) {
+          saveToStorage(remote);
+        }
+      })
+      .catch(() => {});
+    return data;
+  },
+
+  async fetchAll(): Promise<Subscription[]> {
+    try {
+      const remote = await api.getSubscriptions();
+      if (Array.isArray(remote) && remote.length > 0) {
+        saveToStorage(remote);
+        return remote;
+      }
+    } catch {}
     return loadFromStorage();
   },
 
@@ -50,6 +70,11 @@ export const subscriptionService = {
     };
     const updated = [newSubscription, ...subscriptions];
     saveToStorage(updated);
+
+    api.createSubscription(newSubscription).catch((err) => {
+      console.warn('Backend subscription create sync error:', err);
+    });
+
     return newSubscription;
   },
 
@@ -61,6 +86,11 @@ export const subscriptionService = {
     subscriptions[index].status = newStatus;
     subscriptions[index].updatedAt = new Date().toISOString().split('T')[0];
     saveToStorage(subscriptions);
+
+    api.updateSubscriptionStatus(id, newStatus).catch((err) => {
+      console.warn('Backend subscription status sync error:', err);
+    });
+
     return subscriptions[index];
   },
 
