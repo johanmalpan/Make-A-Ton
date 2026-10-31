@@ -1,0 +1,1065 @@
+# MASTER DEVELOPMENT PROMPT: SUBSCRIPTIQ – COMPLETE SUBSCRIPTION MANAGEMENT SYSTEM
+
+## 1. ROLE AND OBJECTIVE
+
+Act as a senior full-stack software architect, backend engineer, database designer, security engineer, and UI/UX developer.
+
+You are working on an existing project called **SubscriptIQ – Subscription Management System**, designed to solve the business requirements described in the provided Subscription Management System PDF for Brightloop Software.
+
+Your responsibility is to transform the existing project into a complete, functional, secure, scalable, production-quality subscription management platform.
+
+This is an existing project. Do NOT unnecessarily rebuild it from scratch.
+
+First inspect the entire existing codebase, understand its architecture, identify bugs, missing functionality, incomplete implementations, duplicated code, security vulnerabilities, and architectural problems.
+
+Then systematically fix and implement everything.
+
+**The final application must satisfy every functional requirement in the original problem statement.**
+
+Do not stop after creating frontend pages or demonstrating sample data. Implement real business logic, persistent database storage, backend APIs, validation, authentication, authorization, and working workflows.
+
+---
+
+# 2. EXISTING PROJECT
+
+The current project contains:
+
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- Lucide icons
+- Existing dashboard and management pages
+- Existing client-side services
+- Existing TypeScript interfaces
+- Mock data and localStorage-based persistence
+
+The existing frontend includes screens for:
+
+- Dashboard
+- Products
+- Product variants
+- Plans
+- Customers
+- Subscriptions
+- Quotations
+- Invoices
+- Payments
+- Discounts
+- Taxes
+- Reports
+- Customer portal
+
+Preserve and improve these existing features wherever appropriate.
+
+Do not remove useful functionality simply because you prefer a different implementation.
+
+---
+
+# 3. TECHNOLOGY STACK
+
+Use the following architecture unless an existing dependency creates a compelling technical reason to retain or modify an alternative.
+
+### Frontend
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- Lucide React
+- React Hook Form where useful
+- Zod for validation
+- TanStack Query for server-state management
+
+### Backend
+- Node.js
+- Express.js
+- TypeScript
+- REST API architecture
+- Zod validation
+- JWT authentication
+- bcrypt password hashing
+
+### Database
+- MySQL
+- Prisma ORM
+- Proper relational database schema
+- Foreign keys
+- Unique constraints
+- Database indexes
+- Database migrations
+
+### Additional services
+- Background job scheduling for recurring billing
+- Email service for password resets and invoice delivery
+- Transaction-safe payment and invoice processing
+
+Do not introduce unnecessary technologies or dependencies.
+
+---
+
+# 4. AUTHENTICATION AND USER MANAGEMENT
+
+Implement a complete authentication system.
+
+### Registration
+- Customers must register using their email and password.
+- Each email address must belong to only one account.
+- Password must contain more than eight characters.
+- Require at least one uppercase letter.
+- Require at least one lowercase letter.
+- Require at least one special character.
+- Validate passwords on both frontend and backend.
+- Store passwords using secure password hashing.
+- Never store plain-text passwords.
+
+### Login
+- Implement actual email and password verification.
+- Generate secure authentication tokens.
+- Implement logout and session invalidation using an appropriate token strategy.
+- Handle invalid credentials and expired sessions.
+- Protect authenticated routes.
+
+### Password reset
+- Implement a functional forgot-password workflow.
+- Generate secure, expiring, single-use reset tokens.
+- Send password reset links to registered email addresses.
+- Never reveal whether an email exists through public error messages.
+
+### Role-based access control
+
+Implement three roles:
+
+1. ADMIN
+2. STAFF
+3. CUSTOMER
+
+ADMIN:
+- Full system access.
+- Create and manage staff.
+- Manage products, plans, taxes and discounts.
+- Manage customers and subscriptions.
+- Manage invoices and payments.
+- View all reports.
+
+STAFF:
+- Manage day-to-day customer operations.
+- View and manage permitted subscriptions.
+- Create quotations and invoices.
+- Record payments.
+- Cannot create staff accounts.
+- Cannot modify restricted administrative configurations.
+
+CUSTOMER:
+- Access only their own account.
+- View their own subscriptions.
+- View their own invoices.
+- View payment history.
+- Manage permitted subscription actions.
+- Cannot access other customers' information.
+
+IMPORTANT:
+Enforce permissions on the backend, not merely by hiding frontend buttons.
+
+Only ADMIN must be able to create staff accounts.
+
+---
+
+# 5. PRODUCT MANAGEMENT
+
+Implement complete product management.
+
+Every product should support:
+
+- Product name
+- Product type
+- Sales price
+- Cost price
+- Description or notes
+- Active/inactive status
+- Creation and modification dates
+
+Implement full CRUD functionality.
+
+### Product variants
+
+Products must support multiple variants.
+
+For example:
+
+Product: Software Subscription
+
+Variants:
+- Standard: ₹0 additional price
+- Odoo: ₹560 additional price
+- Premium: Configurable additional price
+
+Requirements:
+- Create, edit and delete variants.
+- Configure additional variant pricing.
+- Select variants while creating subscriptions or quotations.
+- Automatically calculate the correct final price.
+- Preserve the selected variant and its price in historical subscription and invoice records.
+
+Do not allow a product or variant with existing transaction history to be deleted in a way that breaks historical records. Use archiving or deactivation where appropriate.
+
+---
+
+# 6. PLAN MANAGEMENT
+
+Implement full subscription plan management.
+
+Each plan should contain:
+
+- Plan name
+- Associated products
+- Plan price
+- Billing interval
+- Minimum quantity
+- Availability start date
+- Availability end date
+- Automatic closure configuration
+- Early closure permission
+- Pause permission
+- Renewal permission
+- Active/inactive status
+
+### Supported billing intervals
+
+- Daily
+- Weekly
+- Monthly
+- Yearly
+
+Implement accurate billing date calculations.
+
+Examples:
+- Daily: renew after one day.
+- Weekly: renew after seven days.
+- Monthly: renew on the corresponding monthly billing date.
+- Yearly: renew on the corresponding annual billing date.
+
+Handle month-end dates and leap years correctly.
+
+For example, a monthly subscription starting on January 31 must have a clearly defined and consistent February renewal date.
+
+Do not calculate every non-yearly plan as monthly.
+
+---
+
+# 7. CUSTOMER MANAGEMENT
+
+Implement:
+
+- Create customer
+- Edit customer
+- View customer details
+- Search customers
+- Filter customers
+- Customer status
+- Customer subscription history
+- Customer invoice history
+- Customer payment history
+
+Each customer must be associated with the appropriate user account when they have portal access.
+
+Ensure customers can access only their own records.
+
+---
+
+# 8. QUOTATION MANAGEMENT
+
+Implement a complete quotation system.
+
+### Quotation templates
+
+ADMIN and authorized STAFF must be able to create reusable quotation templates.
+
+Each template should support:
+- Template name
+- Associated plans
+- Product lines
+- Default quantities
+- Unit prices
+- Taxes
+- Payment terms
+- Validity period
+
+### Quotation creation
+
+A quotation must contain:
+- Unique quotation number
+- Customer
+- Selected plan
+- Product lines
+- Selected variants
+- Quantities
+- Unit prices
+- Taxes
+- Discounts
+- Subtotal
+- Final total
+- Payment terms
+- Creation date
+- Expiry date
+
+Allow quotations to be generated from saved templates.
+
+Implement quotation validity.
+
+Expired quotations must not be confirmed without an authorized extension.
+
+### Quotation conversion
+
+Allow valid quotations to be converted into subscriptions.
+
+Ensure all quotation details are correctly transferred.
+
+Prevent duplicate conversion of the same quotation.
+
+---
+
+# 9. SUBSCRIPTION MANAGEMENT
+
+Implement the complete subscription lifecycle specified in the problem statement.
+
+Required states:
+
+- DRAFT
+- QUOTATION
+- CONFIRMED
+- ACTIVE
+- PAUSED
+- CLOSED
+- EXPIRED
+
+Implement valid state transitions.
+
+Example:
+
+DRAFT → QUOTATION → CONFIRMED → ACTIVE → CLOSED
+
+Support:
+- Subscription creation
+- Unique subscription numbering
+- Customer association
+- Plan association
+- Start date
+- Expiry date
+- Payment terms
+- Product lines
+- Quantity
+- Unit price
+- Tax
+- Discounts
+- Subscription history
+
+### Subscription operations
+
+Implement:
+- Confirm subscription
+- Activate subscription
+- Pause subscription
+- Resume subscription
+- Renew subscription
+- Close subscription early
+- Automatic closure at expiry
+- Automatic renewal where configured
+
+Validate every operation against the selected plan's permissions and configuration.
+
+Do not allow invalid status transitions.
+
+Record important lifecycle changes in an audit log.
+
+---
+
+# 10. INVOICE MANAGEMENT
+
+Implement a complete invoice management system.
+
+Every invoice must contain:
+
+- Unique invoice number
+- Customer details
+- Subscription reference
+- Billing period
+- Product lines
+- Product variants
+- Quantities
+- Unit prices
+- Taxes
+- Discounts
+- Subtotal
+- Total
+- Due date
+- Invoice status
+
+Required statuses:
+
+- DRAFT
+- CONFIRMED
+- PAID
+- CANCELLED
+- OVERDUE
+
+### Invoice operations
+
+Implement:
+- Create invoice
+- Generate invoice from subscription
+- Confirm invoice
+- Cancel invoice
+- Send invoice through email
+- Print invoice
+- Download invoice as PDF
+- View invoice details
+- Track invoice payments
+
+### Automatic recurring invoice generation
+
+This is a critical requirement.
+
+Implement a backend recurring billing scheduler.
+
+The scheduler must:
+1. Identify subscriptions due for billing.
+2. Check whether each subscription is eligible for renewal.
+3. Calculate the correct billing period.
+4. Generate the invoice.
+5. Apply the appropriate tax rules.
+6. Apply eligible discounts.
+7. Save the invoice in the database.
+8. Update the next billing date.
+9. Record the billing operation.
+10. Handle failures safely and retry where appropriate.
+
+### Duplicate prevention
+
+Never generate two invoices for the same subscription and billing period.
+
+Implement:
+- Unique billing-cycle identifiers.
+- Database-level unique constraints.
+- Transaction-safe invoice creation.
+- Idempotent billing operations.
+
+Ensure that missed billing cycles can be detected and safely recovered.
+
+Never rely exclusively on a frontend button to trigger recurring billing.
+
+---
+
+# 11. TAX MANAGEMENT
+
+Implement configurable tax rules.
+
+Each tax rule should support:
+- Tax name
+- Tax rate
+- Tax type
+- Description
+- Active/inactive status
+
+Support tax rules at the appropriate product or invoice-line level.
+
+Do not hardcode 18% tax.
+
+The system must:
+- Calculate taxes from configured rules.
+- Apply the correct tax to invoice items.
+- Calculate subtotal and final total accurately.
+- Preserve the applied tax rate and amount in historical invoices.
+- Prevent accidental modification of historical invoice calculations.
+
+Use appropriate decimal precision for financial calculations.
+
+Avoid JavaScript floating-point errors in monetary calculations. Use decimal arithmetic or integer minor currency units consistently.
+
+---
+
+# 12. DISCOUNT MANAGEMENT
+
+Implement a complete discount engine.
+
+Only ADMIN can create or modify discount rules.
+
+Support:
+
+### Discount types
+- Fixed amount
+- Percentage
+
+### Conditions
+- Minimum purchase amount
+- Minimum quantity
+- Start date
+- End date
+- Maximum number of uses
+- Product-specific discounts
+- Subscription-wide discounts
+
+### Automatic application
+
+When generating the next invoice:
+
+1. Identify applicable discount rules.
+2. Validate the date range.
+3. Validate minimum purchase requirements.
+4. Validate minimum quantity.
+5. Check product eligibility.
+6. Check usage limits.
+7. Calculate the discount.
+8. Apply it to the invoice.
+9. Record discount usage safely.
+
+Discounts must automatically stop applying after expiry or when their usage limit is reached.
+
+Prevent race conditions where multiple simultaneous invoices exceed a discount's usage limit.
+
+---
+
+# 13. PAYMENT MANAGEMENT
+
+Implement complete payment recording and reconciliation.
+
+Each payment must contain:
+
+- Unique payment reference
+- Invoice ID
+- Customer ID
+- Payment method
+- Amount
+- Payment date
+- Notes
+- Payment status
+- Creation timestamp
+
+Support payment methods such as:
+- Cash
+- Bank transfer
+- UPI
+- Card
+- Other
+
+Implement:
+- Record payment
+- View payment history
+- Search and filter payments
+- Associate payments with invoices
+- Track partial payments
+- Calculate outstanding balance
+- Detect overpayments
+- Handle payment reversal or deletion correctly
+
+### Financial consistency
+
+When a payment is recorded:
+- Validate the invoice.
+- Validate the payment amount.
+- Update the invoice's paid amount.
+- Recalculate the outstanding amount.
+- Update invoice status appropriately.
+
+For partial payment, the invoice must remain outstanding.
+
+When the full balance is paid, mark it PAID.
+
+Do not mark an invoice PAID merely because any payment has been recorded.
+
+Use database transactions to maintain consistency.
+
+Do not allow deleting a payment without correctly reversing its financial effect. Prefer auditable reversal records over destructive deletion.
+
+---
+
+# 14. CUSTOMER PORTAL
+
+Build a functional customer portal.
+
+Customers must be able to:
+
+- View their account information.
+- View their subscriptions.
+- View subscription status.
+- View available subscription actions.
+- View their invoices.
+- View invoice details.
+- Download invoices.
+- View payment history.
+- View outstanding balances.
+- View overdue invoices.
+- Request permitted subscription changes.
+
+Never expose customer-switching functionality in the real customer portal.
+
+The customer identity must be derived from the authenticated session.
+
+---
+
+# 15. DASHBOARD AND REPORTING
+
+Replace all hardcoded sample financial figures with real database-driven calculations.
+
+Implement:
+
+### Dashboard metrics
+- Total customers
+- Active subscriptions
+- Paused subscriptions
+- Closed subscriptions
+- Total invoices
+- Paid invoices
+- Outstanding invoices
+- Overdue invoices
+- Total payments received
+- Outstanding amount
+- Monthly recurring revenue (MRR)
+- Annual recurring revenue (ARR)
+
+### Reports
+
+Implement:
+- Monthly revenue report
+- Payment report
+- Outstanding invoice report
+- Overdue invoice report
+- Active subscription report
+- Subscription growth report
+- Product revenue report
+- Customer revenue report
+
+### Filters
+
+Support:
+- Date range
+- Customer
+- Product
+- Plan
+- Subscription status
+- Invoice status
+- Payment method
+
+Ensure reports are calculated from actual persisted records.
+
+Clearly distinguish recognized revenue, cash collected, outstanding balances, MRR and ARR. Do not treat them as interchangeable metrics.
+
+---
+
+# 16. DATABASE DESIGN
+
+Create a normalized relational MySQL database.
+
+At minimum, evaluate and implement these entities:
+
+1. users
+2. customers
+3. products
+4. product_variants
+5. plans
+6. plan_products
+7. quotation_templates
+8. quotation_template_items
+9. quotations
+10. quotation_items
+11. subscriptions
+12. subscription_items
+13. tax_rules
+14. discounts
+15. discount_products
+16. discount_usages
+17. invoices
+18. invoice_items
+19. payments
+20. billing_events
+21. password_reset_tokens
+22. audit_logs
+
+Add any additional tables required for correctness.
+
+### Database requirements
+
+- Use primary keys.
+- Use foreign keys.
+- Add unique constraints.
+- Add appropriate indexes.
+- Use decimal-safe financial storage.
+- Add creation and modification timestamps.
+- Use soft deletion or archival where transaction history must be preserved.
+- Prevent orphaned records.
+- Create Prisma migrations.
+- Provide a database seed script.
+
+Create an ER diagram or equivalent database relationship documentation.
+
+---
+
+# 17. API DEVELOPMENT
+
+Build organized REST API endpoints.
+
+Use separate route, controller, service and validation layers where appropriate.
+
+Suggested API structure:
+
+/api/auth
+/api/users
+/api/customers
+/api/products
+/api/product-variants
+/api/plans
+/api/quotations
+/api/quotation-templates
+/api/subscriptions
+/api/invoices
+/api/taxes
+/api/discounts
+/api/payments
+/api/reports
+
+Requirements:
+- Correct HTTP methods.
+- Consistent JSON responses.
+- Input validation.
+- Authentication middleware.
+- Role authorization middleware.
+- Centralized error handling.
+- Pagination.
+- Filtering.
+- Sorting.
+- Proper HTTP status codes.
+
+Do not expose database credentials or secrets to frontend code.
+
+Create API documentation.
+
+---
+
+# 18. SECURITY
+
+Perform a security review.
+
+Implement:
+- Secure password hashing.
+- Protected API routes.
+- Role-based authorization.
+- Customer-level data isolation.
+- Input validation.
+- SQL injection protection through safe ORM usage.
+- Rate limiting for authentication endpoints.
+- Secure password reset tokens.
+- Appropriate CORS configuration.
+- Environment variable management.
+- Safe error messages.
+- Protection against mass assignment.
+- Audit logging for sensitive operations.
+
+Do not expose passwords, reset tokens or private customer information in logs.
+
+---
+
+# 19. PERFORMANCE AND SCALABILITY
+
+The original problem statement requires every page to respond in under two seconds, even with thousands of subscriptions.
+
+Optimize for this requirement.
+
+Implement:
+- Server-side pagination.
+- Database indexes.
+- Efficient database queries.
+- Selective field retrieval.
+- Avoid N+1 queries.
+- Appropriate caching where useful.
+- Efficient dashboard aggregation.
+- Lazy loading for large datasets.
+
+Measure performance rather than claiming that the application meets the two-second requirement without testing.
+
+Test with thousands of seeded subscriptions, invoices and payments.
+
+Document the results and identify any remaining bottlenecks.
+
+---
+
+# 20. FRONTEND IMPROVEMENTS
+
+Preserve the existing SubscriptIQ visual identity.
+
+Improve:
+- Navigation.
+- Dashboard layout.
+- Responsive design.
+- Loading indicators.
+- Error messages.
+- Empty states.
+- Form validation.
+- Confirmation dialogs.
+- Search and filters.
+- Tables.
+- Pagination.
+- Notifications.
+- Accessibility.
+
+Every button must perform a meaningful action.
+
+Do not create buttons that merely look functional.
+
+Remove demo-only features from the production interface.
+
+Do not use hardcoded sample figures in live dashboard metrics.
+
+Provide useful loading, success and error feedback.
+
+---
+
+# 21. BUGS THAT MUST SPECIFICALLY BE FIXED
+
+Inspect the existing codebase and explicitly address the following previously identified problems:
+
+1. Default administrator session without authentication in App.tsx.
+2. Login accepts roles without credential verification.
+3. Customer portal allows switching between customer records.
+4. localStorage is being used as the primary persistence mechanism.
+5. Daily and weekly subscription expiry dates are calculated incorrectly in SubscriptionForm.tsx.
+6. Subscription variants are not properly selected and applied.
+7. Quotation templates are missing.
+8. Subscription status transitions are incomplete.
+9. Pause and resume operations are missing.
+10. Automatic recurring invoice generation is missing.
+11. Duplicate invoice prevention is missing.
+12. Tax calculations use a hardcoded 18%.
+13. Discount rules are not integrated with invoice generation.
+14. Minimum quantity discount condition is missing.
+15. Payment overpayment validation is missing.
+16. Payment deletion does not correctly reverse invoice balances.
+17. Payment processing is not transaction-safe.
+18. Customer portal payment is simulated using setTimeout.
+19. Financial reports contain hardcoded figures.
+20. Overdue invoice detection is incomplete.
+21. ID generation based on the last five digits of Date.now() can cause collisions.
+22. Fixed document numbering based on 2026 needs proper sequence management.
+23. Date handling must be consistent with the configured business timezone.
+24. Storage failures must not silently return demo data.
+25. Tax configuration must be connected to actual invoice calculations.
+
+Do not merely suppress errors. Correct the underlying causes.
+
+---
+
+# 22. TESTING REQUIREMENTS
+
+Write automated tests for the most important business logic.
+
+At minimum, test:
+
+### Authentication
+- Duplicate email registration.
+- Invalid password.
+- Successful login.
+- Invalid login.
+- Password reset.
+- Expired reset token.
+- Role authorization.
+
+### Products and plans
+- Product creation.
+- Variant pricing.
+- Daily billing calculation.
+- Weekly billing calculation.
+- Monthly billing calculation.
+- Yearly billing calculation.
+- Month-end dates.
+- Leap-year handling.
+
+### Subscriptions
+- Valid status transitions.
+- Invalid status transitions.
+- Pause and resume.
+- Renewal.
+- Early closure.
+- Automatic expiry.
+
+### Invoices
+- Correct invoice totals.
+- Correct tax calculation.
+- Discount application.
+- Duplicate invoice prevention.
+- Recurring invoice generation.
+- Failed billing recovery.
+
+### Payments
+- Full payment.
+- Partial payment.
+- Overpayment rejection.
+- Payment reversal.
+- Invoice balance reconciliation.
+
+### Security
+- Customer accessing another customer's invoice.
+- Staff attempting administrator-only actions.
+- Unauthenticated API requests.
+
+### Performance
+- Test thousands of records.
+- Test pagination.
+- Test dashboard aggregation.
+- Measure response times.
+
+---
+
+# 23. DEVELOPMENT EXECUTION STRATEGY
+
+Do not attempt to rewrite the entire application in one uncontrolled operation.
+
+Follow these phases.
+
+PHASE 1: Inspect the complete project.
+- Map all files.
+- Identify existing features.
+- Identify broken functionality.
+- Identify missing requirements.
+- Create an implementation checklist.
+
+PHASE 2: Backend and database.
+- Configure Express.
+- Configure MySQL.
+- Configure Prisma.
+- Design the schema.
+- Create migrations.
+- Create seed data.
+- Implement authentication.
+
+PHASE 3: Core APIs.
+- Products.
+- Variants.
+- Plans.
+- Customers.
+- Quotations.
+- Subscriptions.
+
+PHASE 4: Billing engine.
+- Taxes.
+- Discounts.
+- Invoice generation.
+- Recurring billing scheduler.
+- Duplicate prevention.
+- Payment reconciliation.
+
+PHASE 5: Frontend integration.
+- Replace localStorage services with API services.
+- Integrate all existing screens.
+- Add loading and error states.
+- Implement actual user permissions.
+
+PHASE 6: Reporting and optimization.
+- Replace mock metrics.
+- Implement filters and pagination.
+- Optimize database queries.
+- Conduct performance testing.
+
+PHASE 7: Testing and delivery.
+- Run all tests.
+- Fix TypeScript errors.
+- Fix build errors.
+- Fix runtime errors.
+- Verify all requirements.
+- Prepare setup and deployment documentation.
+
+---
+
+# 24. STRICT DEVELOPMENT RULES
+
+These instructions are mandatory.
+
+1. Inspect before modifying.
+2. Do not delete existing useful code without a clear technical reason.
+3. Do not replace real functionality with mock data.
+4. Do not use localStorage as the production database.
+5. Do not create fake backend endpoints.
+6. Do not leave buttons non-functional.
+7. Do not hardcode financial metrics.
+8. Do not hardcode tax rates.
+9. Do not bypass authentication or permissions.
+10. Do not simulate successful payments.
+11. Do not claim that a feature is complete unless it actually works.
+12. Do not ignore errors or warnings.
+13. Do not silently skip requirements.
+14. Do not expose secrets in source code.
+15. Preserve working existing components where possible.
+16. Use database transactions for financial operations.
+17. Keep the code modular and maintainable.
+18. Do not introduce unnecessary dependencies.
+19. Never overwrite the original project without preserving a backup or using version control.
+20. After every implementation phase, run relevant tests and report the results.
+
+If a requirement cannot be implemented because credentials, external services or configuration are unavailable, implement the appropriate integration structure and clearly identify what remains to be configured.
+
+---
+
+# 25. FINAL ACCEPTANCE CRITERIA
+
+The project is considered complete only when:
+
+- Customers can register and log in securely.
+- Admin can manage staff.
+- Staff have restricted permissions.
+- Customers can access only their own information.
+- Admin can manage products, variants, plans, taxes and discounts.
+- Sales staff can create quotations from templates.
+- Quotations can be converted into subscriptions.
+- Subscriptions support the required lifecycle.
+- All four billing intervals work correctly.
+- Recurring invoices are generated automatically.
+- Duplicate billing is prevented.
+- Tax and discount rules work correctly.
+- Invoices can be confirmed, cancelled, sent and printed.
+- Payments can be recorded and reconciled.
+- Partial and overdue payments are tracked correctly.
+- The customer portal works.
+- Reports use actual database records.
+- The application handles thousands of records efficiently.
+- Automated tests pass.
+- The application builds and runs without critical errors.
+- Every requirement in the original PDF is accounted for.
+
+---
+
+# 26. FINAL DELIVERABLES
+
+At completion, provide:
+
+1. Fully functional frontend.
+2. Fully functional backend.
+3. MySQL database schema.
+4. Prisma migrations.
+5. Database seed script.
+6. Environment variable example file.
+7. API documentation.
+8. Automated tests.
+9. README with installation and execution instructions.
+10. Database relationship diagram.
+11. Deployment instructions.
+12. Final requirement-by-requirement completion checklist.
+
+Also provide a list of:
+- Features implemented.
+- Bugs fixed.
+- Files created.
+- Files modified.
+- Dependencies added or removed.
+- Remaining limitations.
+- Tests executed and their actual results.
+
+## FINAL INSTRUCTION
+
+Begin by inspecting the complete existing SubscriptIQ project and the original Subscription Management System PDF.
+
+Use the PDF as the authoritative functional specification.
+
+Preserve the existing project where possible, correct all identified issues, implement every missing requirement, and improve anything necessary for correctness, security, maintainability and performance.
+
+Work systematically until the entire application is functional.
+
+**Do not stop at planning, explaining or generating code snippets. Implement the changes in the actual project files and verify them.**
