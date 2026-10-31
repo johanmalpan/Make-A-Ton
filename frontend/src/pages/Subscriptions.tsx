@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Repeat, Calendar, ChevronRight, Edit, Trash2, FilePlus, Pause, Play } from 'lucide-react';
 import { PageHeader } from '../components/layout/PageHeader';
 import { SearchBar } from '../components/common/SearchBar';
-import { StatusBadge } from '../common/StatusBadge';
+import { StatusBadge } from '../components/common/StatusBadge';
 import { SubscriptionForm } from '../components/subscriptions/SubscriptionForm';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { Subscription, SubscriptionStatus } from '../types/subscription';
@@ -281,3 +281,4 @@ export const Subscriptions: React.FC<SubscriptionsProps> = ({
     </div>
   );
 };
+
